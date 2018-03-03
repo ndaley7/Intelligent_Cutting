@@ -6,8 +6,8 @@
 %Run and select a file in the target folder, all files will be imported
 %separately as vectors and as a single concatenated matrix at the end.
 
-% clear
-% clc
+clear
+clc
 %Variables;
 global PATH;
 global FILE;
@@ -59,14 +59,13 @@ for i=1:lengthfiles %Operations to occur on each file
     folderbegin=slashid(end-1);
     Concatname=PATH((folderbegin+1):(folderend-1));
 end
-    ConcatCommand='=[';
+    ConcatCommand='=['
 for i=1:length(filenameHolder)
    
-   ConcatCommand=strcat(ConcatCommand,filenameHolder{i});
-   ConcatCommand=strcat(ConcatCommand,';');
+    
     
     
 end
-ConcatCommand=strcat(ConcatCommand,']');
+
 genvarname(Concatname);
-eval([Concatname ConcatCommand]);
+eval([genvarname '= numbers']);
