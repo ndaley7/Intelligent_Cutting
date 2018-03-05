@@ -7,6 +7,8 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/features/pfh.h>
 #include <pcl/features/fpfh.h>
+#include <pcl/features/shot.h>
+
 #include <pcl/filters/passthrough.h>
 
 #include <fstream>
@@ -23,7 +25,7 @@
 //#include <cmath.h>
 
 bool next_iteration=false;
-
+std::string descType="";//Descriptor Suffix
 struct bird_object
 {
     std::string name;
@@ -99,6 +101,36 @@ void write_desc_fileFPFH(std::string filenameout,pcl::PointCloud<pcl::FPFHSignat
         {
             descfile<<",";
             descfile<<(*descriptors)[i].histogram[w];
+        }
+        descfile<<endl;
+    }
+
+    std::cout << filenameout << std::endl;
+    //Close File
+    descfile.close();
+}
+void write_desc_fileSHOT(std::string filenameout,pcl::PointCloud<pcl::SHOT352>::Ptr descriptors)
+{
+    //Initialize ofstream
+    std::ofstream descfile;
+
+    //Check for file existence
+    if(fileExists(filenameout.c_str()))
+    {
+        descfile.open(filenameout.c_str(), std::ofstream::out | std::ofstream::app);
+    }
+    else
+    {
+        descfile.open(filenameout.c_str(), std::ofstream::out | std::ofstream::app);
+    }
+    //Write out descriptors to file
+    for (size_t i = 0; i < (*descriptors).size(); ++i)
+    {
+        descfile<<(*descriptors)[i].descriptor[0];
+        for (size_t w = 1; w < 352; ++w)
+        {
+            descfile<<",";
+            descfile<<(*descriptors)[i].descriptor[w];
         }
         descfile<<endl;
     }
@@ -199,6 +231,7 @@ void load_bird_objects(std::string path, std::vector<bird_object>* bird_objects,
 
 void calculate_PFH(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud , pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors,pcl::PointCloud<pcl::Normal>::Ptr normals)
 {
+    descType="PFH";
     std::cout << "Calculate PFH" << std::endl;
     //pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 
@@ -225,6 +258,7 @@ void calculate_PFH(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud , pcl::PointClou
 void calculate_FPFH(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud , pcl::PointCloud<pcl::FPFHSignature33>::Ptr descriptors,int normalRad,int searchRad)
 {
   {
+      descType="FPFH";
       std::cout << "Calculate PFH" << std::endl;
       pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 
@@ -251,6 +285,21 @@ void calculate_FPFH(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud , pcl::PointClo
 
   }
 }
+void calculate_SHOT(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud , pcl::PointCloud<pcl::SHOT352>::Ptr descriptors,pcl::PointCloud<pcl::Normal>::Ptr normals)
+{
+    descType="SHOT";
+    std::cout << "Calculate SHOT" << std::endl;
+    // SHOT estimation object.
+    pcl::SHOTEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::SHOT352> shot;
+    shot.setInputCloud(cloud);
+    shot.setInputNormals(normals);
+    // The radius that defines which of the keypoint's neighbors are described.
+    // If too large, there may be clutter, and if too small, not enough points may be found.
+    shot.setRadiusSearch(0.005);
+
+    shot.compute(*descriptors);
+
+}
 
 
 int main (int argc, char** argv)
@@ -275,7 +324,7 @@ int main (int argc, char** argv)
     //Variable init
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     //std::string descType="FPFH";
-    std::string descType="PFH";
+
     
     //Nearest NEighbor settings
     int K = 1000;
@@ -302,9 +351,11 @@ int main (int argc, char** argv)
     //filter
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filteredNN (new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_1500 (new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::PassThrough<pcl::PointXYZRGB> pass;
     pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors(new pcl::PointCloud<pcl::PFHSignature125>());
     pcl::PointCloud<pcl::FPFHSignature33>::Ptr fdescriptors(new pcl::PointCloud<pcl::FPFHSignature33>());
+    pcl::PointCloud<pcl::SHOT352>::Ptr shotdescriptors(new pcl::PointCloud<pcl::SHOT352>());
     pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> normalEstimation;
     pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
     pcl::PointCloud<pcl::Normal>::Ptr fullnormals(new pcl::PointCloud<pcl::Normal>);
@@ -389,6 +440,23 @@ int main (int argc, char** argv)
                 cloud_filteredNN->push_back(cloud->points[ pointIdxNKNSearch[i] ]);
             }
         }
+        pointIdxNKNSearch.clear();
+        pointNKNSquaredDistance.clear();
+
+        if ( kdtree.nearestKSearch (searchPoint, 1500, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
+        {
+            for (size_t i = 0; i < pointIdxNKNSearch.size (); ++i)
+            {
+//                    std::cout << "    "  <<   cloud->points[ pointIdxNKNSearch[i] ].x<< " "
+//                    << cloud->points[ pointIdxNKNSearch[i] ].y
+//                    << " " << cloud->points[ pointIdxNKNSearch[i] ].z
+//                    << " (distance: " << sqrt(pointNKNSquaredDistance[i]) << ")"
+//                    << std::endl;
+
+                cloud_1500->push_back(cloud->points[ pointIdxNKNSearch[i] ]);
+            }
+        }
+        //1500 Nearest Point cloud
             //viewer.showCloud (cloud_filteredNN);
             // Estimate the normals.
 
@@ -398,7 +466,7 @@ int main (int argc, char** argv)
         normalEstimation.setSearchMethod(kdtreeptr);
         normalEstimation.compute(*normals);
         //Calulate full normals
-        normalEstimation.setInputCloud(cloud);
+        normalEstimation.setInputCloud(cloud_1500);
         normalEstimation.setRadiusSearch(0.003);
 
         normalEstimation.setSearchMethod(kdtreeptr);
@@ -408,7 +476,7 @@ int main (int argc, char** argv)
         pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud_filteredNN);
         viewerVis->addPointCloud<pcl::PointXYZRGB> (cloud_filteredNN, rgb, "sample cloud");
         viewerVis->addPointCloud<pcl::PointXYZRGB> (cloud, rgb, "full cloud");
-        viewerVis->resetCameraViewpoint("sample cloud");
+        //viewerVis->resetCameraViewpoint("sample cloud");
         //viewerVis->resetCamera ();
         viewerVis->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "sample cloud");
         viewerVis->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal> (cloud_filteredNN, normals, 1, 0.001, "normals");
@@ -441,7 +509,8 @@ int main (int argc, char** argv)
 
         //pcl::PointCloud<pcl::PFHSignature125>::Ptr descriptors(new pcl::PointCloud<pcl::PFHSignature125>());
         //calculate_FPFH(cloud_filteredNN, fdescriptors,NormR,DescR);
-        calculate_PFH(cloud_filteredNN, descriptors,normals);
+        //calculate_PFH(cloud_filteredNN, descriptors,normals);
+        calculate_SHOT(cloud_1500, shotdescriptors,fullnormals);
             //Generate descriptor Filename
 
 
@@ -450,11 +519,13 @@ int main (int argc, char** argv)
         fullfilename=fullfilename+fullfilename.substr(0,3)+descType+ss.str()+".csv";
         fullfilename.replace(fullfilename.begin(),fullfilename.begin()+7,"");
         //write_desc_fileFPFH(fullfilename,fdescriptors);
-        write_desc_filePFH(fullfilename,descriptors);
+        //write_desc_filePFH(fullfilename,descriptors);
+        write_desc_fileSHOT(fullfilename,shotdescriptors);
     }
     //cin>>holder;
             //Clear vectors and points
     cloud_filteredNN->clear();
+    cloud_1500->clear();
     pointIdxNKNSearch.clear();
     pointNKNSquaredDistance.clear();
     fdescriptors->clear();
