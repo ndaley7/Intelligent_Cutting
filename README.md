@@ -1,2 +1,2 @@
 # Intelligent_Cutting
-Dealing with PFH's and other PCL descriptors
+Experimental script to develop a repeatable method of point detection on the body of a chicken utilizing the descriptors provided within the Point Cloud Library (PCL) Package.
